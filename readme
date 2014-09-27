@@ -1,4 +1,15 @@
-功能
+conv2lua.py:
+    convert excel to lua
+    ignore empty cell
+    usage: lua_sample/conv.sh
 
-策划配置的 excel 表格, 调用 convert.py 转为 lua 表, 方便程序调用, 以及热更新
+conv2pb.py:
+    convert excel to protobuf serialized binary data, with protobuf protocol supplied
+    ignore undefined sheet & key
+    support repeated rows
+    support enum value defined
+    usage: pb_sample/conv.sh
 
+QA:
+    mailto gaccob@qq.com
+    
