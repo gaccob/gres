@@ -1,0 +1,14 @@
+import "common.proto";
+
+package Config;
+
+message MailConfigInfo {
+	optional Common.MAIL_TYPE type = 1;
+	optional int32 expire_time = 2;
+	optional int32 capacity = 3;
+    repeated int32 test = 4;
+}
+
+message MailConfig {
+	repeated MailConfigInfo mail = 1;
+}

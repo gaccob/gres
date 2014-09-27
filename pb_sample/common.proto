@@ -1,0 +1,6 @@
+package Common;
+
+enum MAIL_TYPE {
+    MAIL_TYPE_ALL = 0;
+    MAIL_TYPE_PLAYER = 1;
+}
