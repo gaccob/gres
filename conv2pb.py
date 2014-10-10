@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
-import xlrd
 import sys
 import os
 import getopt
+
+abspath = os.path.abspath(sys.argv[0])
+sys.path.append(os.path.dirname(abspath) + '/dep')
+import xlrd
 
 TMAP = {}
 TMAP[1] = int
@@ -13,7 +16,9 @@ TMAP[4] = long
 TMAP[5] = float
 TMAP[6] = float
 TMAP[7] = bool
+# 8: enumerate
 TMAP[9] = str
+# 10: message
 
 LMAP = {}
 LMAP[1] = 'optional'
@@ -23,13 +28,13 @@ LMAP[3] = 'repeated'
 MOD = []
 
 PROTOC = 'protoc'
-TMP_FILE = []
+PYTHON_PATH = './'
 
 ######################################################################
 
 def load_enum(module, enum_key):
     if module.__dict__.has_key(enum_key):
-        return eval('module.%s' % val)
+        return eval('module.%s' % enum_key)
     else:
         for mod in MOD:
             if mod.__dict__.has_key(enum_key):
@@ -39,72 +44,98 @@ def load_enum(module, enum_key):
 
 ######################################################################
 
-def load_data(module, prototype, msg, key, val):
-    # if not defined in protocol, ignore
+def get_field_name(prototype, key):
     if key not in prototype.fields_by_name:
-        return
-    field = prototype.fields_by_name[key]
+        ds = key.split('.')
+        if len(ds) == 1:
+            return (None, None)
+        if ds[0] not in prototype.fields_by_name:
+            print '%s -> %s not found' % (key, ds[0])
+            return (None, None)
+        return (ds[0], '.'.join(ds[1:len(ds)]))
+    return (key, None)
 
-    # value or enumerate
+######################################################################
+
+def load_field(module, field, obj, name, val):
+    # 枚举类型
     if field.enum_type != None:
-        value = load_enum(module, val)
-    else:
-        if not field.cpp_type in TMAP:
-            print "protobuf field[%s] invalid cpp type" % key
-            quit()
+        val = load_enum(module, val)
+    # 基本类型
+    elif field.cpp_type in TMAP:
         visual_type = TMAP[field.cpp_type]
-        value = visual_type(val)
+        val = visual_type(val)
+    # 字符编码
+    if type(val) == type(''):
+        val = unicode(val, 'utf8')
 
-    # repeated or not
     if LMAP[field.label] == 'repeated':
-        obj = getattr(msg, key)
-        obj.append(value)
+        getattr(obj, name).append(val)
     else:
-        if type(value) == type(''):
-            value = unicode(value, 'utf8')
-        msg.__setattr__(key, value)
+        obj.__setattr__(name, val)
 
 ######################################################################
 
-def convert_sheet_print(file_name, content):
-    try:
-        fd = open(file_name, 'w')
-    except:
-        print '%s open fail' % file_name
+def load_stucture(module, field, obj, sub_field_name, val):
+    prototype = field.message_type
+    (name, sub_name) = get_field_name(prototype, sub_field_name)
+    if name == None or name not in prototype.fields_by_name:
+        print 'load %s fail' % sub_field_name
         quit()
-    fd.write(content)
-    fd.close()
+    sub_field = prototype.fields_by_name[name]
+    if sub_name == None:
+        return load_field(module, sub_field, obj, name, val)
+    else:
+        return load_stucture(module, sub_field, getattr(obj, name), sub_name, val)
 
 ######################################################################
 
-def convert_sheet_check(message, file_name):
-    try:
-        fd = open(file_name, 'rb')
-        message.ParseFromString(fd.read())
-    except:
-        print 'open check file[%s] fail' % file_name
-        quit()
+def load_data(module, row_field, row_obj, key, val, repeated_map):
+    prototype = row_field.message_type
+
+    # 是否是嵌套struct
+    (name, sub_name) = get_field_name(prototype, key)
+    if name == None:
+        return
+    item_field = prototype.fields_by_name[name]
+
+    # 普通类型
+    if item_field.message_type == None:
+        return load_field(module, item_field, row_obj, name, val)
+
+    # 嵌套structure
+    else:
+        if LMAP[item_field.label] == 'repeated':
+            if name in repeated_map:
+                item_field_obj = repeated_map[name]
+            else:
+                item_field_obj = getattr(row_obj, name).add()
+                repeated_map[name] = item_field_obj
+        else:
+            item_field_obj = getattr(row_obj, name)
+        return load_stucture(module, item_field, item_field_obj, sub_name, val)
 
 ######################################################################
 
 def convert_sheet(sheet, module, output_path):
     config_name = sheet.name
     if not module.__dict__.has_key(config_name):
-        print ('sheett [%s] not found in protobuf' % config_name)
+        print ('sheet[%s] config not found ignore' % config_name)
         return
 
     # protobuf data structure
     table = module.__dict__[config_name]()
 
-    # proto type
+    # 配置类型
     prototype = module.DESCRIPTOR.message_types_by_name[config_name]
     assert len(prototype.fields) > 0
-    row_name = prototype.fields[0].name
-    data_prototype = prototype.fields_by_name[row_name].message_type
+    row_field = prototype.fields[0]
 
     # load table by rows
     for row in range(2, sheet.nrows):
+        repeated_map = {}
         for col in range(sheet.ncols):
+            # key 在第二行
             key = sheet.cell_value(1, col)
             val = sheet.cell_value(row, col)
             if type(val) == type(u''):
@@ -112,64 +143,74 @@ def convert_sheet(sheet, module, output_path):
             if val == '':
                 continue
             if col == 0:
-                rows = getattr(table, row_name)
-                msg = rows.add()
-            load_data(module, data_prototype, msg, key, val)
+                row_objs = getattr(table, row_field.name)
+                row_obj = row_objs.add()
+            load_data(module, row_field, row_obj, key, val, repeated_map)
 
-    # output bin file
-    bin_file = '%s/%s.bin' % (output_path, config_name)
-    convert_sheet_print(bin_file, table.SerializePartialToString())
-    convert_sheet_check(table, bin_file)
-    print 'convert %s success\n' % bin_file
+    # output bin
+    output_file = '%s/%s.pbin' % (output_path, config_name)
+    try:
+        fd = open(output_file, 'wb+')
+    except:
+        print '%s open fail' % output_file
+        quit()
+    fd.write(table.SerializePartialToString())
+    fd.close()
 
-    # output log file
+    # check
+    res = check(table, output_file)
+    if res == False:
+        print 'convert %s fail' % output_file
+        return False
+    print 'convert %s success' % output_file
+
+    # log
     log_file = '%s/%s.log' % (output_path, config_name)
     from google.protobuf import text_format as mod
-    convert_sheet_print(log_file, mod.MessageToString(table))
-
+    try:
+        fd = open(log_file, 'w')
+    except:
+        print '%s open fail' % log_file
+        quit()
+    fd.write(mod.MessageToString(table))
+    fd.close()
+    return True
 ######################################################################
 
-def load_import(import_path, proto):
-
-    imports = []
-    for f in os.listdir(import_path):
-        if f == proto:
-            continue
-        import_proto = os.path.splitext(f)[0]
-        suffix = os.path.splitext(f)[1]
+def load_import(import_path):
+    sys.path.append(PYTHON_PATH)
+    for files in os.listdir(import_path):
+        suffix = os.path.splitext(files)[1]
         if suffix == '.proto':
-            cmd = '%s --error_format=msvs -I%s --python_out=. %s/%s' % (PROTOC, import_path, import_path, f)
+            cmd = '%s -I%s --python_out=%s %s/%s' % (PROTOC, import_path, PYTHON_PATH, import_path, files)
             os.system(cmd)
-            imports.append(import_proto)
-
-    for p in imports:
-        mod = __import__('%s_pb2' % p)
-        TMP_FILE.append(p)
-        MOD.append(mod)
-        print 'mod[%s] loaded' % p
+    for files in os.listdir(import_path):
+        proto = os.path.splitext(files)[0]
+        suffix = os.path.splitext(files)[1]
+        if suffix == '.proto':
+            mod = __import__('%s_pb2' % proto)
+            MOD.append(mod)
 
 ######################################################################
 
 def convert(excel, proto, output_path, import_path):
-
     proto_file = os.path.basename(proto)
     proto_path = os.path.dirname(proto)
-    proto_name =  os.path.splitext(proto_file)[0]
+    if proto_path == '':
+        proto_path = '.'
+    proto_name = os.path.splitext(proto_file)[0]
     proto_bin_name = '%s.pb' % proto_name
 
-    import_cmd = ''
-    if import_path != '':
-        import_cmd = '%s -I%s' % (import_cmd, import_path)
-    if proto_path != '':
-        import_cmd = '%s -I%s' % (import_cmd, proto_path)
-
     # generate python-protobuf-interface
-    cmd = '%s --error_format=msvs %s --python_out=. %s ' % (PROTOC, import_cmd, proto)
+    if import_path != '':
+        cmd = '%s -I%s -I%s --python_out=%s %s ' % (PROTOC, proto_path, import_path, PYTHON_PATH, proto)
+    else:
+        cmd = '%s -I%s --python_out=%s %s ' % (PROTOC, proto_path, PYTHON_PATH, proto)
     os.system(cmd)
 
     # import protocol
+    sys.path.append(PYTHON_PATH)
     module = __import__('%s_pb2' % proto_name)
-    TMP_FILE.append(proto_name)
 
     # open excel
     try:
@@ -180,11 +221,21 @@ def convert(excel, proto, output_path, import_path):
 
     # get sheet one by one
     for sheet in book.sheets():
-        convert_sheet(sheet, module, output_path)
+        if convert_sheet(sheet, module, output_path) == False:
+            print '%s convert fail\n' % excel
+            quit()
+    print '%s convert success\n' % excel
 
-    # delete temporary file
-    for f in TMP_FILE:
-        os.system('rm ./%s_pb2.py*' % f)
+######################################################################
+
+def check(message, file_name):
+    try:
+        fd = open(file_name, 'rb')
+        message.ParseFromString(fd.read())
+    except:
+        print 'open check file[%s] fail' % file_name
+        return False
+    return True
 
 ######################################################################
 
@@ -228,7 +279,7 @@ if __name__ == '__main__':
     sys.path.append('.')
 
     if import_path != '':
-        load_import(import_path, proto)
+        load_import(import_path)
 
     convert(excel, proto, output_path, import_path)
 
