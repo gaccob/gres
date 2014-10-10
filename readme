@@ -1,14 +1,19 @@
 conv2lua.py:
-    convert excel to lua
-    ignore empty cell
-    usage: lua_sample/conv.sh
+    excel转lua
+    忽略空格
+    使用参考 lua_sample
 
 conv2pb.py:
-    convert excel to protobuf serialized binary data, with protobuf protocol supplied
-    ignore undefined sheet & key
-    support repeated rows
-    support enum value defined
-    usage: pb_sample/conv.sh
+    excel转protobuf序列化数据
+    sheet名为protobuf定义的结构体, 潜规则寻找第一个repeated子结构体做解析
+    第一行留给策划使用
+    第二行为子结构体的field名字
+    忽略未定义sheet名字和field名字
+    支持子结构体的repeated字段
+    支持子结构体嵌套结构体
+    支持import
+    支持protobuf enum
+    使用可以参考 pb_sample
 
 QA:
     mailto gaccob@qq.com
