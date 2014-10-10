@@ -4,3 +4,12 @@ enum MAIL_TYPE {
     MAIL_TYPE_ALL = 0;
     MAIL_TYPE_PLAYER = 1;
 }
+
+message StructB {
+    optional int32 i = 1;
+}
+
+message StructA {
+    optional StructB b = 1;
+    optional string s = 2;
+}

@@ -1,12 +1,13 @@
 import "common.proto";
 
-package Config;
+package Resource;
 
 message MailConfigInfo {
 	optional Common.MAIL_TYPE type = 1;
 	optional int32 expire_time = 2;
 	optional int32 capacity = 3;
     repeated int32 test = 4;
+    repeated Common.StructA a = 5;
 }
 
 message MailConfig {
