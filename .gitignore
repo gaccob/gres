@@ -2,4 +2,4 @@
 *.swp
 *.log
 *.pbin
-*_pb2.py
+*_sample/*_pb2.py

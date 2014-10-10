@@ -246,14 +246,15 @@ def usage():
         -p, --proto         <protobuf decript protocol>     [required]
         -I, --import_path   <protobuf import path>          [optional]
         -O, --output_path   <convert result's path>         [optional]
+        -P, --protoc_tool   <protoc tool>                   [optional]
     '''
     quit()
 
 ######################################################################
 
 if __name__ == '__main__':
-    sopt = 'f:p:I:O:'
-    lopt = ['excel_file=', 'proto=', 'import_path=', 'output_path=']
+    sopt = 'f:p:I:O:P:'
+    lopt = ['excel_file=', 'proto=', 'import_path=', 'output_path=', 'protoc_tool=']
     try:
         opts, args = getopt.getopt(sys.argv[1:], sopt, lopt)
     except:
@@ -272,6 +273,8 @@ if __name__ == '__main__':
             import_path = val
         elif opt in ('-O', '--output_path'):
             output_path = val
+        elif opt in ('-P', '--protoc_tool'):
+            PROTOC = val
 
     if excel == '' or proto == '':
         usage()
