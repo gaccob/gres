@@ -1,7 +1,21 @@
-import os,sys,getopt
+import sys,getopt
 import xlrd
 
 ##################################################################
+
+def output_cell(output, shift, dict, sheet, row):
+    for (k,v) in dict.items():
+        if type(v) == type({}):
+            output.append("\t" * shift + "\"" + k + "\": {")
+            output_cell(output, shift + 1, v, sheet, row)
+            output.append("\t" * shift + "},");
+        else:
+            val = sheet.cell(row, v).value
+            if type(val) == type(1) or type(val) == type(1.1):
+                output.append("\t" * shift + "\"" + k + "\": " + str(val) + ",")
+            else:
+                val = unicode(val, 'utf8')
+                output.append("\t" * shift + "\"" + k + "\": \"" + val + "\",")
 
 def convert_sheet(sheet, output_path):
     nrows = sheet.nrows
@@ -9,23 +23,27 @@ def convert_sheet(sheet, output_path):
 
     keys = {}
     for i in range(0, ncols):
-        keys[i] = sheet.cell(0, i).value
+        parent = keys
+        fields = (sheet.cell(0, i).value).split('.')
+        for j in range(0, len(fields)):
+            field = fields[j]
+            if j == len(fields) - 1:
+                parent[field] = i
+            else:
+                if parent.get(field) == None:
+                    parent[field] = {}
+                parent = parent[field]
 
     output = []
-    output.append("Config = {")
-    for i in range(1, nrows):
-        output.append("    {")
-        for j in keys:
-            val = sheet.cell(i, j).value
-            if val == '' or val == u'':
-                continue
-            line = "        %s = %s" % (keys[j], val)
-            line = ((j == ncols - 1) and line or ("%s, " % line)).encode("utf-8")
-            output.append(line)
-        output.append((i == nrows - 1) and "    }" or "    },")
-    output.append("}")
+    output.append("var " + sheet.name + " = {")
+    for row in range(1, nrows):
+        output.append("\t\"" + str(row - 1) + "\": {");
+        output_cell(output, 2, keys, sheet, row);
+        output.append("\t},");
+    output.append("};")
+    output.append("module.exports = " + sheet.name + ";");
 
-    name = '%s/%s.lua' % (output_path, sheet.name)
+    name = '%s/%s.js' % (output_path, sheet.name)
     try:
         fd = open(name, 'w')
     except Exception, e:
