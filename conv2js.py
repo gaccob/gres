@@ -14,17 +14,19 @@ def output_cell(output, shift, dict, sheet, row):
             if type(val) == type(1) or type(val) == type(1.1):
                 output.append("\t" * shift + "\"" + k + "\": " + str(val) + ",")
             else:
-                val = unicode(val, 'utf8')
                 output.append("\t" * shift + "\"" + k + "\": \"" + val + "\",")
 
-def convert_sheet(sheet, output_path):
+def convert_sheet(sheet, skip_rows, output_path):
     nrows = sheet.nrows
     ncols = sheet.ncols
 
     keys = {}
     for i in range(0, ncols):
         parent = keys
-        fields = (sheet.cell(0, i).value).split('.')
+        val = sheet.cell(skip_rows, i).value
+        if val == "":
+            continue
+        fields = val.split('.')
         for j in range(0, len(fields)):
             field = fields[j]
             if j == len(fields) - 1:
@@ -36,12 +38,12 @@ def convert_sheet(sheet, output_path):
 
     output = []
     output.append("var " + sheet.name + " = {")
-    for row in range(1, nrows):
-        output.append("\t\"" + str(row - 1) + "\": {");
-        output_cell(output, 2, keys, sheet, row);
-        output.append("\t},");
+    for row in range(skip_rows + 1, nrows):
+        output.append("\t\"" + str(row - skip_rows - 1) + "\": {")
+        output_cell(output, 2, keys, sheet, row)
+        output.append("\t},")
     output.append("};")
-    output.append("module.exports = " + sheet.name + ";");
+    output.append("module.exports = " + sheet.name + ";")
 
     name = '%s/%s.js' % (output_path, sheet.name)
     try:
@@ -57,7 +59,7 @@ def convert_sheet(sheet, output_path):
 
 ##################################################################
 
-def convert(xls, output_path):
+def convert(xls, skip_rows, output_path):
     try:
         book = xlrd.open_workbook(xls)
     except Exception, e:
@@ -66,7 +68,7 @@ def convert(xls, output_path):
 
     # get sheet one by one
     for sheet in book.sheets():
-        convert_sheet(sheet, output_path)
+        convert_sheet(sheet, skip_rows, output_path)
 
 ##################################################################
 
@@ -75,6 +77,7 @@ def usage():
     conv2lua.py usage:
         -f, --excel_file    <excel file name>               [required]
         -O, --output_path   <convert result's path>         [optional]
+        -s, --skip_rows     <skip sheet first n rows>       [optional]
     '''
     quit()
 
@@ -83,7 +86,7 @@ def usage():
 if __name__=="__main__":
 
     sopt = 'f:O:'
-    lopt = ['excel_file=', 'output_path=']
+    lopt = ['excel_file=', 'output_path=', 'skip_rows=']
     try:
         opts, args = getopt.getopt(sys.argv[1:], sopt, lopt)
     except Exception, e:
@@ -92,14 +95,17 @@ if __name__=="__main__":
 
     excel = ''
     output_path = '.'
+    skip_rows = 0
     for opt, val in opts:
         if opt in ('-f', '--excel_file'):
             excel = val
         elif opt in ('-O', '--output_path'):
             output_path = val
+        elif opt in ('-s', '--skip_rows'):
+            skip_rows = int(val)
 
     if excel == '':
         usage()
 
-    convert(excel, output_path)
+    convert(excel, skip_rows, output_path)
 
